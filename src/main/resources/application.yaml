@@ -1,0 +1,32 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: movie
+  datasource:
+    url: jdbc:mysql://localhost:3306/movie?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true&useSSL=false
+    username: root
+    password: "1234"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  jackson:
+    default-property-inclusion: non_null
+
+tmdb:
+  base-url: https://api.themoviedb.org/3
+  default-language: ko-KR
+  # 실행 전 환경변수 TMDB_BEARER_TOKEN 으로 주입 (README 참고)
+  bearer-token: ${TMDB_BEARER_TOKEN:CHANGE_ME}
+
+logging:
+  level:
+    com.example.movie: DEBUG
+    org.hibernate.SQL: DEBUG
