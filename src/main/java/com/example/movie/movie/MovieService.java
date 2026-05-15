@@ -1,5 +1,6 @@
 package com.example.movie.movie;
 
+import com.example.movie.genre.GenreRepository;
 import com.example.movie.movie.dto.TmdbMovieDto;
 import com.example.movie.movie.dto.TmdbPopularResponse;
 import java.time.LocalDate;
@@ -21,6 +22,7 @@ public class MovieService {
 
   private final RestClient tmdbRestClient;
   private final MovieRepository movieRepository;
+  private final GenreRepository genreRepository;
 
   @Value("${tmdb.default-language}")
   private String defaultLanguage;
@@ -83,11 +85,25 @@ public class MovieService {
   }
 
   private TmdbMovieDto toDto(Movie m) {
+    List<Integer> genreIds = parseGenreIds(m.getGenreIds());
+
+    List<TmdbMovieDto.GenreInfo> genres = genreIds.stream()
+        .map(genreId -> genreRepository.findById(genreId.longValue())
+            .map(g -> {
+              TmdbMovieDto.GenreInfo info = new TmdbMovieDto.GenreInfo();
+              info.setId(g.getId());
+              info.setName(g.getName());
+              return info;
+            })
+            .orElse(null))
+        .filter(g -> g != null)
+        .toList();
+
     return new TmdbMovieDto(
         m.getId(),
         m.isAdult(),
         m.getBackdropPath(),
-        parseGenreIds(m.getGenreIds()),
+        genreIds,
         m.getTitle(),
         m.getOriginalLanguage(),
         m.getOriginalTitle(),
@@ -99,7 +115,7 @@ public class MovieService {
         m.isVideo(),
         m.getVoteAverage(),
         m.getVoteCount(),
-        null);
+        genres);
   }
 
   private LocalDate parseDate(String value) {
