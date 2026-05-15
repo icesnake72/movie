@@ -1,6 +1,8 @@
 package com.example.movie.genre;
 
+import com.example.movie.genre.dto.TmdbGenreDto;
 import com.example.movie.genre.dto.TmdbGenreResponse;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,5 +41,15 @@ public class GenreService {
     int count = response.getGenres().size();
     log.info("장르 저장 완료: 총 {} 개", count);
     return count;
+  }
+
+  @Transactional(readOnly = true)
+  public List<TmdbGenreDto> findAll() {
+    return genreRepository.findAll().stream()
+        .map(g -> TmdbGenreDto.builder()
+            .id(g.getId())
+            .name(g.getName())
+            .build())
+        .toList();
   }
 }

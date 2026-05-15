@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class GenreController {
 
   private final GenreService genreService;
-  private final GenreRepository genreRepository;
 
   @PostMapping("/sync")
   public ResponseEntity<Map<String, Object>> sync() {
@@ -26,11 +25,6 @@ public class GenreController {
 
   @GetMapping
   public List<TmdbGenreDto> list() {
-    return genreRepository.findAll().stream()
-        .map(g -> TmdbGenreDto.builder()
-            .id(g.getId())
-            .name(g.getName())
-            .build())
-        .toList();
+    return genreService.findAll();
   }
 }
