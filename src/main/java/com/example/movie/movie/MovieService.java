@@ -1,5 +1,6 @@
 package com.example.movie.movie;
 
+import com.example.movie.genre.Genre;
 import com.example.movie.genre.GenreRepository;
 import com.example.movie.movie.dto.TmdbMovieDto;
 import com.example.movie.movie.dto.TmdbPopularResponse;
@@ -8,6 +9,8 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,8 +56,13 @@ public class MovieService {
 
   @Transactional(readOnly = true)
   public List<TmdbMovieDto> findAll() {
+    Map<Long, String> genreMap = genreRepository.findAll().stream()
+        .collect(Collectors.toMap(
+            g -> g.getId(),
+            g -> g.getName()));
+
     return movieRepository.findAll().stream()
-        .map(this::toDto)
+        .map(m -> toDto(m, genreMap))
         .toList();
   }
 
@@ -84,19 +92,17 @@ public class MovieService {
         .build();
   }
 
-  private TmdbMovieDto toDto(Movie m) {
+  private TmdbMovieDto toDto(Movie m, Map<Long, String> genreMap) {
     List<Integer> genreIds = parseGenreIds(m.getGenreIds());
 
     List<TmdbMovieDto.GenreInfo> genres = genreIds.stream()
-        .map(genreId -> genreRepository.findById(genreId.longValue())
-            .map(g -> {
-              TmdbMovieDto.GenreInfo info = new TmdbMovieDto.GenreInfo();
-              info.setId(g.getId());
-              info.setName(g.getName());
-              return info;
-            })
-            .orElse(null))
-        .filter(g -> g != null)
+        .filter(genreId -> genreMap.containsKey(genreId.longValue()))
+        .map(genreId -> {
+          TmdbMovieDto.GenreInfo info = new TmdbMovieDto.GenreInfo();
+          info.setId(genreId.longValue());
+          info.setName(genreMap.get(genreId.longValue()));
+          return info;
+        })
         .toList();
 
     return new TmdbMovieDto(
