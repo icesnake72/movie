@@ -98,7 +98,8 @@ public class MovieService {
         m.isSoftcore(),
         m.isVideo(),
         m.getVoteAverage(),
-        m.getVoteCount());
+        m.getVoteCount(),
+        null);
   }
 
   private LocalDate parseDate(String value) {

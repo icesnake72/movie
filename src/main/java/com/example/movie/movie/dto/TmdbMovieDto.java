@@ -81,4 +81,15 @@ public class TmdbMovieDto {
   /** 평점에 참여한 투표 수. voteAverage 의 신뢰도를 가늠하는 보조 지표. */
   @JsonProperty("vote_count")
   private Integer voteCount;
+
+  private List<GenreInfo> genres;
+
+  @Getter
+  @Setter
+  @NoArgsConstructor
+  @AllArgsConstructor
+  public static class GenreInfo {
+    private Long id;
+    private String name;
+  }
 }
