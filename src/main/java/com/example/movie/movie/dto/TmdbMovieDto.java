@@ -89,7 +89,7 @@ public class TmdbMovieDto {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class GenreInfo {
-    private Long id;
-    private String name;
+  private Long id;
+  private String name;
   }
 }
