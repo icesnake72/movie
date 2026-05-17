@@ -6,8 +6,6 @@ import com.example.movie.movie.dto.TmdbMovieDto;
 import com.example.movie.movie.dto.TmdbPopularResponse;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,8 +43,11 @@ public class MovieService {
       return 0;
     }
 
+    Map<Long, Genre> genreMap = genreRepository.findAll().stream()
+        .collect(Collectors.toMap(Genre::getId, g -> g));
+
     List<Movie> movies = response.getResults().stream()
-        .map(this::toEntity)
+        .map(dto -> toEntity(dto, genreMap))
         .toList();
 
     movieRepository.saveAll(movies);
@@ -56,13 +57,8 @@ public class MovieService {
 
   @Transactional(readOnly = true)
   public List<TmdbMovieDto> findAll() {
-    Map<Long, String> genreMap = genreRepository.findAll().stream()
-        .collect(Collectors.toMap(
-            g -> g.getId(),
-            g -> g.getName()));
-
-    return movieRepository.findAll().stream()
-        .map(m -> toDto(m, genreMap))
+    return movieRepository.findAllWithGenres().stream()
+        .map(this::toDto)
         .toList();
   }
 
@@ -72,12 +68,11 @@ public class MovieService {
     log.info("movie 삭제 요청: id={}", id);
   }
 
-  private Movie toEntity(TmdbMovieDto dto) {
-    return Movie.builder()
+  private Movie toEntity(TmdbMovieDto dto, Map<Long, Genre> genreMap) {
+    Movie movie = Movie.builder()
         .id(dto.getId())
         .adult(dto.isAdult())
         .backdropPath(dto.getBackdropPath())
-        .genreIds(dto.getGenreIds() == null ? "" : dto.getGenreIds().toString())
         .title(dto.getTitle())
         .originalLanguage(dto.getOriginalLanguage())
         .originalTitle(dto.getOriginalTitle())
@@ -90,19 +85,32 @@ public class MovieService {
         .voteAverage(dto.getVoteAverage())
         .voteCount(dto.getVoteCount())
         .build();
+
+    if (dto.getGenreIds() != null) {
+      dto.getGenreIds().forEach(genreId -> {
+        Genre genre = genreMap.get(genreId.longValue());
+        if (genre != null) {
+          movie.getMovieGenres().add(
+              MovieGenre.builder().movie(movie).genre(genre).build());
+        }
+      });
+    }
+
+    return movie;
   }
 
-  private TmdbMovieDto toDto(Movie m, Map<Long, String> genreMap) {
-    List<Integer> genreIds = parseGenreIds(m.getGenreIds());
-
-    List<TmdbMovieDto.GenreInfo> genres = genreIds.stream()
-        .filter(genreId -> genreMap.containsKey(genreId.longValue()))
-        .map(genreId -> {
+  private TmdbMovieDto toDto(Movie m) {
+    List<TmdbMovieDto.GenreInfo> genres = m.getMovieGenres().stream()
+        .map(mg -> {
           TmdbMovieDto.GenreInfo info = new TmdbMovieDto.GenreInfo();
-          info.setId(genreId.longValue());
-          info.setName(genreMap.get(genreId.longValue()));
+          info.setId(mg.getGenre().getId());
+          info.setName(mg.getGenre().getName());
           return info;
         })
+        .toList();
+
+    List<Integer> genreIds = genres.stream()
+        .map(g -> g.getId().intValue())
         .toList();
 
     return new TmdbMovieDto(
@@ -134,18 +142,5 @@ public class MovieService {
       log.warn("release_date 파싱 실패: {}", value);
       return null;
     }
-  }
-
-  private List<Integer> parseGenreIds(String value) {
-    if (value == null || value.isBlank()) {
-      return Collections.emptyList();
-    }
-    String inner = value.replace("[", "").replace("]", "").replace(" ", "");
-    if (inner.isEmpty()) {
-      return Collections.emptyList();
-    }
-    return Arrays.stream(inner.split(","))
-        .map(Integer::parseInt)
-        .toList();
   }
 }

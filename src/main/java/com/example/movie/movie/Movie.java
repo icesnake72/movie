@@ -1,12 +1,17 @@
 package com.example.movie.movie;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Lob;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,10 +36,6 @@ public class Movie {
   @JsonProperty("backdrop_path")
   @Column(name = "backdrop_path", length = 500)
   private String backdropPath;
-
-  @JsonProperty("genre_ids")
-  @Column(name = "genre_ids", length = 500)
-  private String genreIds;
 
   @Column(name = "title", length = 500, nullable = false)
   private String title;
@@ -75,4 +76,8 @@ public class Movie {
   @JsonProperty("vote_count")
   @Column(name = "vote_count")
   private Integer voteCount;
+
+  @Builder.Default
+  @OneToMany(mappedBy = "movie", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+  private List<MovieGenre> movieGenres = new ArrayList<>();
 }
