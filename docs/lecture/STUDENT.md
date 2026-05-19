@@ -105,6 +105,11 @@ public class Movie {
   private String backdropPath;
 
   // ... 이하 필드
+
+  @Builder.Default
+  @OneToMany(mappedBy = "movie", cascade = CascadeType.ALL,
+             orphanRemoval = true, fetch = FetchType.LAZY)
+  private List<MovieGenre> movieGenres = new ArrayList<>();
 }
 ```
 
@@ -112,25 +117,83 @@ public class Movie {
 > - `@NoArgsConstructor(PROTECTED)` — JPA 가 리플렉션으로 인스턴스 생성하기 위해 필요. 외부에서 `new Movie()` 호출 방지.
 > - `@Builder` — 필드 많을 때 가독성 있게 객체 생성.
 > - 컬럼명 `snake_case`, 자바 필드명 `camelCase` 관례.
+> - `@Builder.Default` — `@Builder` 사용 시 컬렉션 필드는 반드시 기본값 초기화 필요.
 
-### 2-3. genre_ids 처리 — 단일 컬럼 보관 전략
+### 2-3. Genre / MovieGenre 엔티티 설계 — 다대다 관계 분리
 
-```java
-@Column(length = 500)
-private String genreIds;            // "[10751, 35, 12]" 형태로 저장
+장르는 여러 영화에 속하고, 영화는 여러 장르를 가집니다. 이런 **다대다(N:M) 관계**는 중간 테이블로 분리합니다.
+
+```
+popular_movie (N) ←→ movie_genre ←→ genre (N)
 ```
 
-> **포인트** — 정규화 vs 단일 컬럼
-> - 정상이라면 `genre`, `movie_genre` 두 테이블로 분리(다대다)
-> - 지금은 학습 단계라 단일 컬럼으로 단순화 → 다음 단원의 자연스러운 동기 부여
+**Genre 엔티티 — genre 테이블**
+
+```java
+@Entity
+@Table(name = "genre")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
+public class Genre {
+  @Id
+  private Long id;  // TMDB 장르 ID 를 PK 로 직접 사용
+
+  @Column(name = "name", length = 100, nullable = false)
+  private String name;
+}
+```
+
+**MovieGenre 엔티티 — movie_genre 중간 테이블**
+
+```java
+@Entity
+@Table(
+    name = "movie_genre",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"movie_id", "genre_id"})
+)
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@Builder
+public class MovieGenre {
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "movie_id", nullable = false)
+  private Movie movie;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "genre_id", nullable = false)
+  private Genre genre;
+}
+```
+
+> **포인트**
+> - `@ManyToMany` 대신 중간 엔티티를 직접 만드는 이유 — 중간 테이블에 컬럼을 추가할 수 없기 때문. 중간 엔티티로 분리하면 향후 장르 순서 등 속성 확장이 가능.
+> - `cascade = ALL + orphanRemoval = true` — Movie 삭제 시 연관 MovieGenre 레코드 자동 삭제.
+> - `fetch = LAZY` — 필요 시에만 장르를 로딩해 불필요한 쿼리를 줄임.
 
 ### 2-4. Repository 작성
 
 ```java
-public interface MovieRepository extends JpaRepository<Movie, Long> {}
+public interface MovieRepository extends JpaRepository<Movie, Long> {
+
+  @Query("SELECT DISTINCT m FROM Movie m "
+       + "LEFT JOIN FETCH m.movieGenres mg "
+       + "LEFT JOIN FETCH mg.genre")
+  List<Movie> findAllWithGenres();
+}
+
+public interface GenreRepository extends JpaRepository<Genre, Long> {}
 ```
 
-> **포인트** — 한 줄로 `save / findAll / findById / deleteById / count` 등 자동 제공.
+> **포인트**
+> - `JpaRepository` 한 줄로 `save / findAll / findById / deleteById / count` 등 자동 제공.
+> - `findAllWithGenres()` — `LEFT JOIN FETCH` 로 Movie, MovieGenre, Genre 를 한 쿼리로 로딩. `DISTINCT` 로 중복 방지.
 
 ---
 
@@ -293,11 +356,21 @@ curl -i -X DELETE http://localhost:9000/api/movies/popular/1226863
 ### 5-2. DB 직접 조회
 
 ```sql
-SELECT id, title, genre_ids, vote_average FROM popular_movie
-ORDER BY popularity DESC LIMIT 5;
+-- 인기 영화 + 장르 목록 함께 조회
+SELECT m.id, m.title,
+       GROUP_CONCAT(g.name ORDER BY g.name SEPARATOR ', ') AS genres,
+       m.vote_average
+FROM popular_movie m
+LEFT JOIN movie_genre mg ON mg.movie_id = m.id
+LEFT JOIN genre g ON g.id = mg.genre_id
+GROUP BY m.id, m.title, m.vote_average
+ORDER BY m.popularity DESC
+LIMIT 5;
 ```
 
-> **포인트** — JPA 가 만든 SQL 을 실제로 보여주기. `show-sql: true` 로그와 매칭.
+> **포인트**
+> - JPA 가 만든 SQL 을 `show-sql: true` 로그와 매칭해서 보여주기.
+> - `GROUP_CONCAT` — 한 영화의 여러 장르 행을 하나의 문자열로 묶어 주는 MySQL 집계 함수.
 
 ### 5-3. Git / GitHub 배포
 
@@ -318,7 +391,6 @@ gh repo create movie --public --source=. --push
 
 ## 다음 차시 예고
 
-- 장르 테이블 분리 → 다대다 매핑 (`@ManyToMany` 또는 `@OneToMany` 두 단계)
 - `@RestControllerAdvice` 로 전역 예외 처리
 - 페이징/정렬 (`Pageable`, `Page<T>`)
 - 단위 테스트 (`@DataJpaTest`, `@WebMvcTest`)
@@ -330,6 +402,6 @@ gh repo create movie --public --source=. --push
 | 질문 | 답변 요약 |
 |---|---|
 | TMDB id 를 PK 로 쓰면 우리 시스템 PK 와 충돌할 수 있지 않나요? | 가능. 단일 데이터 소스 학습 단계에서는 단순함이 우선. 다음 단원에서 자체 PK + `tmdb_id UNIQUE` 분리. |
-| `genre_ids` 를 `String` 으로 저장하면 검색 못하잖아요? | 맞음. 그래서 다음 단원에서 정규화. |
+| `@ManyToMany` 를 쓰면 더 간단하지 않나요? | 간단하지만 중간 테이블에 컬럼을 추가할 수 없음. 중간 엔티티(`MovieGenre`)로 분리하면 향후 확장이 가능해 실무에서 선호. |
 | 왜 응답 DTO 가 요청 DTO(`TmdbMovieDto`) 와 같은가요? | 이번 단계에선 동일 형태가 클라이언트 일관성에 도움. 실제 프로젝트에선 응답 DTO 별도 분리가 일반적. |
 | `ddl-auto: create` 는 데이터를 다 날리지 않나요? | 맞음. 학습 환경 한정. 운영은 `validate` + 마이그레이션 도구. |
