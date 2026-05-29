@@ -62,6 +62,40 @@ public class MovieService {
         .toList();
   }
 
+  @Transactional(readOnly = true)
+  public List<TmdbMovieDto> findByGenreId(Long genreId) {
+    return movieRepository.findAllByGenreId(genreId).stream()
+        .map(this::toDto).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<TmdbMovieDto> findByTitle(String title) {
+    return movieRepository.findAllByTitleContaining(title).stream()
+        .map(this::toDto).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<TmdbMovieDto> findAllSorted(String sort) {
+    List<Movie> movies = switch (sort) {
+      case "popularity"  -> movieRepository.findAllOrderByPopularityDesc();
+      case "voteAverage" -> movieRepository.findAllOrderByVoteAverageDesc();
+      default            -> movieRepository.findAllWithGenres();
+    };
+    return movies.stream().map(this::toDto).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<TmdbMovieDto.GenreInfo> findGenresByMovieId(Long movieId) {
+    return movieRepository.findGenresByMovieId(movieId).stream()
+        .map(g -> {
+          TmdbMovieDto.GenreInfo info = new TmdbMovieDto.GenreInfo();
+          info.setId(g.getId());
+          info.setName(g.getName());
+          return info;
+        })
+        .toList();
+  }
+
   @Transactional
   public void deleteById(Long id) {
     movieRepository.deleteById(id);

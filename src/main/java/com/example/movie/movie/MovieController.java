@@ -28,8 +28,23 @@ public class MovieController {
   }
 
   @GetMapping
-  public List<TmdbMovieDto> list() {
+  public List<TmdbMovieDto> list(
+      @RequestParam(required = false) Long genreId,
+      @RequestParam(required = false) String title,
+      @RequestParam(required = false) String sort) {
+    if (genreId != null) return movieService.findByGenreId(genreId);
+    if (title != null)   return movieService.findByTitle(title);
+    if (sort != null)    return movieService.findAllSorted(sort);
     return movieService.findAll();
+  }
+
+  @GetMapping("/{id}/genres")
+  public ResponseEntity<List<TmdbMovieDto.GenreInfo>> genres(@PathVariable("id") Long id) {
+    List<TmdbMovieDto.GenreInfo> result = movieService.findGenresByMovieId(id);
+    if (result.isEmpty()) {
+      return ResponseEntity.notFound().build();
+    }
+    return ResponseEntity.ok(result);
   }
 
   @DeleteMapping("/{id}")
