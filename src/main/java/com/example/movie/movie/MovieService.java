@@ -23,6 +23,7 @@ public class MovieService {
 
   private final RestClient tmdbRestClient;
   private final MovieRepository movieRepository;
+  private final MovieGenreRepository movieGenreRepository;
   private final GenreRepository genreRepository;
 
   @Value("${tmdb.default-language}")
@@ -164,6 +165,83 @@ public class MovieService {
         m.getVoteAverage(),
         m.getVoteCount(),
         genres);
+  }
+
+  /**
+   * cascade 없이 Movie → MovieGenre 를 단계별로 직접 저장하는 예제.
+   * Movie 엔티티에 cascade = NONE 이라고 가정했을 때의 수동 구현.
+   *
+   * 저장 순서:
+   *   1) Movie 만 먼저 저장 (movie_genre 컬렉션은 비어 있음)
+   *   2) 저장된 Movie ID를 이용해 MovieGenre 엔티티를 별도 생성
+   *   3) MovieGenreRepository 로 MovieGenre 를 직접 저장
+   */
+  @Transactional
+  public int syncPopularMoviesNoCascade(int page) {
+    TmdbPopularResponse response = tmdbRestClient.get()
+        .uri(uriBuilder -> uriBuilder.path("/movie/popular")
+            .queryParam("language", defaultLanguage)
+            .queryParam("page", page)
+            .build())
+        .retrieve()
+        .body(TmdbPopularResponse.class);
+
+    if (response == null || response.getResults() == null || response.getResults().isEmpty()) {
+      log.warn("TMDB popular 응답이 비어있음. page={}", page);
+      return 0;
+    }
+
+    Map<Long, Genre> genreMap = genreRepository.findAll().stream()
+        .collect(Collectors.toMap(Genre::getId, g -> g));
+
+    // Step 1: Movie 엔티티만 생성 — movieGenres 컬렉션에 아무것도 넣지 않는다
+    List<Movie> movies = response.getResults().stream()
+        .map(dto -> Movie.builder()
+            .id(dto.getId())
+            .adult(dto.isAdult())
+            .backdropPath(dto.getBackdropPath())
+            .title(dto.getTitle())
+            .originalLanguage(dto.getOriginalLanguage())
+            .originalTitle(dto.getOriginalTitle())
+            .overview(dto.getOverview())
+            .popularity(dto.getPopularity())
+            .posterPath(dto.getPosterPath())
+            .releaseDate(parseDate(dto.getReleaseDate()))
+            .softcore(dto.isSoftcore())
+            .video(dto.isVideo())
+            .voteAverage(dto.getVoteAverage())
+            .voteCount(dto.getVoteCount())
+            .build())
+        .toList();
+
+    // Step 2: Movie 만 먼저 INSERT — popular_movie 테이블에만 행이 생긴다
+    //         cascade 없으므로 movie_genre 테이블에는 아직 아무것도 없음
+    List<Movie> savedMovies = movieRepository.saveAll(movies);
+    log.info("Movie 저장 완료: count={}", savedMovies.size());
+
+    // Step 3: 저장 완료된 Movie 를 기준으로 MovieGenre 엔티티를 직접 생성
+    //         movie.getId() 가 확정된 이후에만 FK 를 가진 MovieGenre 를 만들 수 있다
+    List<MovieGenre> movieGenres = response.getResults().stream()
+        .flatMap(dto -> {
+          // savedMovies 리스트는 순서가 동일하므로 ID 로 매핑
+          Movie savedMovie = movieRepository.findById(dto.getId()).orElseThrow();
+          if (dto.getGenreIds() == null) return java.util.stream.Stream.empty();
+          return dto.getGenreIds().stream()
+              .map(genreId -> genreMap.get(genreId.longValue()))
+              .filter(genre -> genre != null)
+              .map(genre -> MovieGenre.builder()
+                  .movie(savedMovie)   // FK movie_id 직접 지정
+                  .genre(genre)        // FK genre_id 직접 지정
+                  .build());
+        })
+        .toList();
+
+    // Step 4: MovieGenre 를 별도 리파지토리로 직접 INSERT
+    //         cascade 에 의존하지 않고 명시적으로 저장
+    movieGenreRepository.saveAll(movieGenres);
+    log.info("MovieGenre 저장 완료: count={}", movieGenres.size());
+
+    return savedMovies.size();
   }
 
   private LocalDate parseDate(String value) {

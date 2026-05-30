@@ -78,6 +78,9 @@ public class Movie {
   private Integer voteCount;
 
   @Builder.Default
-  @OneToMany(mappedBy = "movie", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+  @OneToMany(mappedBy = "movie",  // MovieGenre.movie 필드가 연관관계 주인 (FK 보유측)
+    cascade = CascadeType.ALL,    // Movie 영속성 작업을 자식에 전파
+    orphanRemoval = true,         // 컬렉션에서 빠진 자식은 DELETE
+    fetch = FetchType.LAZY)       // 실제 접근 시점까지 로딩 지연 (기본값)
   private List<MovieGenre> movieGenres = new ArrayList<>();
 }
