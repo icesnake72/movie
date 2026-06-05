@@ -83,4 +83,11 @@ public class Movie {
     orphanRemoval = true,         // 컬렉션에서 빠진 자식은 DELETE
     fetch = FetchType.LAZY)       // 실제 접근 시점까지 로딩 지연 (기본값)
   private List<MovieGenre> movieGenres = new ArrayList<>();
+
+  @Builder.Default
+  @OneToMany(mappedBy = "movie",  // MovieActor.movie 가 연관관계 주인
+    cascade = CascadeType.ALL,    // Movie 삭제 시 출연 매핑도 함께 삭제
+    orphanRemoval = true,
+    fetch = FetchType.LAZY)
+  private List<MovieActor> movieActors = new ArrayList<>();  // Actor 자체는 cascade 대상 아님(독립 도메인)
 }

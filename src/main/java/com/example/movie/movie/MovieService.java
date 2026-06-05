@@ -24,6 +24,7 @@ public class MovieService {
   private final RestClient tmdbRestClient;
   private final MovieRepository movieRepository;
   private final MovieGenreRepository movieGenreRepository;
+  private final MovieActorRepository movieActorRepository;
   private final GenreRepository genreRepository;
 
   @Value("${tmdb.default-language}")
@@ -101,6 +102,26 @@ public class MovieService {
   public void deleteById(Long id) {
     movieRepository.deleteById(id);
     log.info("movie 삭제 요청: id={}", id);
+  }
+
+  /**
+   * 주어진 배우들이 모두 함께 출연한 영화 목록.
+   * 1) 중간 테이블에서 GROUP BY + HAVING 으로 교집합 movie id 를 구하고
+   * 2) 그 id 들로 장르까지 fetch join 하여 DTO 로 변환한다.
+   */
+  @Transactional(readOnly = true)
+  public List<TmdbMovieDto> findSharedMovies(List<Long> actorIds) {
+    if (actorIds == null || actorIds.isEmpty()) {
+      return List.of();
+    }
+    List<Long> distinctIds = actorIds.stream().distinct().toList();
+    List<Long> movieIds = movieActorRepository.findSharedMovieIds(distinctIds, distinctIds.size());
+    if (movieIds.isEmpty()) {
+      return List.of();
+    }
+    return movieRepository.findAllByIdInWithGenres(movieIds).stream()
+        .map(this::toDto)
+        .toList();
   }
 
   private Movie toEntity(TmdbMovieDto dto, Map<Long, Genre> genreMap) {

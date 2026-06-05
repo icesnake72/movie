@@ -1,5 +1,7 @@
 package com.example.movie.movie;
 
+import com.example.movie.actor.ActorService;
+import com.example.movie.actor.dto.CastMemberDto;
 import com.example.movie.movie.dto.TmdbMovieDto;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MovieController {
 
   private final MovieService movieService;
+  private final ActorService actorService;
 
   @PostMapping("/sync")
   public ResponseEntity<Map<String, Object>> sync(
@@ -45,6 +48,38 @@ public class MovieController {
       return ResponseEntity.notFound().build();
     }
     return ResponseEntity.ok(result);
+  }
+
+  /** 특정 영화의 출연진(cast)을 TMDB 에서 동기화. */
+  @PostMapping("/{id}/credits/sync")
+  public ResponseEntity<Map<String, Object>> syncCredits(@PathVariable("id") Long id) {
+    int saved = actorService.syncCredits(id);
+    return ResponseEntity.ok(Map.of("movieId", id, "saved", saved));
+  }
+
+  /** 영화로 출연진 검색 (castOrder 순). */
+  @GetMapping("/{id}/actors")
+  public ResponseEntity<List<CastMemberDto>> actors(@PathVariable("id") Long id) {
+    List<CastMemberDto> result = actorService.findActorsByMovie(id);
+    if (result.isEmpty()) {
+      return ResponseEntity.notFound().build();
+    }
+    return ResponseEntity.ok(result);
+  }
+
+  /** 영화별 출연진 수. */
+  @GetMapping("/{id}/actors/count")
+  public Map<String, Object> actorCount(@PathVariable("id") Long id) {
+    return Map.of("movieId", id, "count", actorService.countActorsByMovie(id));
+  }
+
+  /**
+   * 두 명 이상의 배우가 함께 출연한 영화 검색.
+   * 예) {@code /api/movies/popular/shared?actorId=1&actorId=2}
+   */
+  @GetMapping("/shared")
+  public List<TmdbMovieDto> sharedMovies(@RequestParam("actorId") List<Long> actorIds) {
+    return movieService.findSharedMovies(actorIds);
   }
 
   @DeleteMapping("/{id}")
